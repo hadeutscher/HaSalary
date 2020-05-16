@@ -90,7 +90,7 @@ def main():
         tax_worth_features += (social_salary - STUDY_FUND_TAX_EXEMPT_MAX) * STUDY_FUND_EMPLOYER
         sfund = STUDY_FUND_EMPLOYEE * social_salary
     else:
-        sfund = STUDY_FUND_EMPLOYEE * STUDY_FUND_TAX_EXEMPT_MAX
+        sfund = STUDY_FUND_EMPLOYEE * min(social_salary, STUDY_FUND_TAX_EXEMPT_MAX)
 
     # National Insurance
     salary_for_natins = salary + tax_worth_features
