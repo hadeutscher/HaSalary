@@ -116,7 +116,7 @@ def main():
     reparations_cash = min(reparations, REPARATIONS_PULL_TAX_EXEMPT_MAX)
     if reparations > PENSION_MAX_TAX_EXEMPT_REPERATIONS:
             reparations_cash += reparations - PENSION_MAX_TAX_EXEMPT_REPERATIONS
-    sfund_cash = (STUDY_FUND_EMPLOYEE + STUDY_FUND_EMPLOYER) * (social_salary if full_study_fund else STUDY_FUND_TAX_EXEMPT_MAX)
+    sfund_cash = (STUDY_FUND_EMPLOYEE + STUDY_FUND_EMPLOYER) * (social_salary if full_study_fund else min(social_salary, STUDY_FUND_TAX_EXEMPT_MAX))
     total_monthly_income = netto_salary + reparations_cash + sfund_cash
     total_monthly_income = postprocess(total_monthly_income)
     print("---Other stats---")
