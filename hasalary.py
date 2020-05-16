@@ -38,7 +38,7 @@ REPARATIONS_PULL_TAX_EXEMPT_MAX = 12420 / 12 # Section 7a(a)(2)
 ### National Insurance law ###
 # Right hand is National Insurance and Health Insurance, respectively
 NATIONAL_INSURANCE_STEPS = [
-    (AVERAGE_SALARY * 0.6, 0.004 + 0.031), # 
+    (AVERAGE_SALARY * 0.6, 0.004 + 0.031),
     (44020, 0.07 + 0.05)
     ]
 
@@ -80,7 +80,7 @@ def main():
     pens = PENSION_EMPLOYEE * social_salary
     if social_salary > PENSION_EMPLOYER_TAX_EXEMPT_SALARY_MAX:
         # Zkifat Tagmulim
-        tax_worth_features += (social_salary - PENSION_EMPLOYER_TAX_EXEMPT_SALARY_MAX) * PENSION_EMPLOYER 
+        tax_worth_features += (social_salary - PENSION_EMPLOYER_TAX_EXEMPT_SALARY_MAX) * PENSION_EMPLOYER
     reparations = PENSION_REPERATIONS * social_salary
     if reparations > PENSION_REPARATIONS_TAX_EXEMPT_SALARY_MAX:
         # Zkifat Pitzuiim
@@ -115,14 +115,14 @@ def main():
     # Part 2 (total income)
     reparations_cash = min(reparations, REPARATIONS_PULL_TAX_EXEMPT_MAX)
     if reparations > PENSION_REPARATIONS_TAX_EXEMPT_SALARY_MAX:
-            reparations_cash += reparations - PENSION_REPARATIONS_TAX_EXEMPT_SALARY_MAX
+        reparations_cash += reparations - PENSION_REPARATIONS_TAX_EXEMPT_SALARY_MAX
     sfund_cash = (STUDY_FUND_EMPLOYEE + STUDY_FUND_EMPLOYER) * (social_salary if full_study_fund else min(social_salary, STUDY_FUND_TAX_EXEMPT_MAX))
     total_monthly_income = netto_salary + reparations_cash + sfund_cash
     total_monthly_income = postprocess(total_monthly_income)
     print("---Other stats---")
     print(f"Reparations cash: {round(reparations_cash)}")
     print(f"Study fund cash: {round(sfund_cash)}")
-    
+
     # Part 3 (savings)
     if target is None:
         return
@@ -134,7 +134,6 @@ def main():
             years = i / 12
             break
     print(f"{years:.1f} years to reach target of {round(target_amount)} with {round(monthly_gain)} monthly saving")
-    
 
 
 if __name__ == "__main__":
