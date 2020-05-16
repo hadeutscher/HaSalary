@@ -127,13 +127,12 @@ def main():
     if target is None:
         return
     monthly_gain = total_monthly_income - monthly_expense
-    target_amount = monthly_expense * SELF_SUSTAINMENT if target is None else target
     monthly_gain_rate = 1 + (yearly_gain_rate - 1) / 12
     for i in itertools.count():
-        if current_cash * monthly_gain_rate ** i + sum(monthly_gain * monthly_gain_rate ** j for j in range(i)) >= target_amount:
+        if current_cash * monthly_gain_rate ** i + sum(monthly_gain * monthly_gain_rate ** j for j in range(i)) >= target:
             years = i / 12
             break
-    print(f"{years:.1f} years to reach target of {round(target_amount)} with {round(monthly_gain)} monthly saving")
+    print(f"{years:.1f} years to reach target of {round(target)} with {round(monthly_gain)} monthly saving")
 
 
 if __name__ == "__main__":
