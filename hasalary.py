@@ -31,7 +31,7 @@ INCOME_TAX_STEPS = [
 PENSION_REIMBURSE = 0.35 # Section 45a(b)
 PENSION_REIMBURSE_PAYMENTS_MAX = 105600 * 0.07 / 12 # Section 47(a)(1), also see 45a(d)(2)(b)(2), 45a(e)(2)(b)(2)(a)
 PENSION_EMPLOYER_TAX_EXEMPT_SALARY_MAX = AVERAGE_SALARY * 2.5 # Section 3(e3)(2)
-PENSION_MAX_TAX_EXEMPT_REPERATIONS = 34900 / 12 # Section 3(e3)(2)
+PENSION_REPARATIONS_TAX_EXEMPT_SALARY_MAX = 34900 / 12 # Section 3(e3)(2)
 STUDY_FUND_TAX_EXEMPT_MAX = 15712 # Section 3(e)
 REPARATIONS_PULL_TAX_EXEMPT_MAX = 12420 / 12 # Section 7a(a)(2)
 
@@ -82,9 +82,9 @@ def main():
         # Zkifat Tagmulim
         tax_worth_features += (social_salary - PENSION_EMPLOYER_TAX_EXEMPT_SALARY_MAX) * PENSION_EMPLOYER 
     reparations = PENSION_REPERATIONS * social_salary
-    if reparations > PENSION_MAX_TAX_EXEMPT_REPERATIONS:
+    if reparations > PENSION_REPARATIONS_TAX_EXEMPT_SALARY_MAX:
         # Zkifat Pitzuiim
-        tax_worth_features += reparations - PENSION_MAX_TAX_EXEMPT_REPERATIONS
+        tax_worth_features += reparations - PENSION_REPARATIONS_TAX_EXEMPT_SALARY_MAX
     if social_salary > STUDY_FUND_TAX_EXEMPT_MAX and full_study_fund:
         # Zkifat Hishtalmut
         tax_worth_features += (social_salary - STUDY_FUND_TAX_EXEMPT_MAX) * STUDY_FUND_EMPLOYER
@@ -114,8 +114,8 @@ def main():
 
     # Part 2 (total income)
     reparations_cash = min(reparations, REPARATIONS_PULL_TAX_EXEMPT_MAX)
-    if reparations > PENSION_MAX_TAX_EXEMPT_REPERATIONS:
-            reparations_cash += reparations - PENSION_MAX_TAX_EXEMPT_REPERATIONS
+    if reparations > PENSION_REPARATIONS_TAX_EXEMPT_SALARY_MAX:
+            reparations_cash += reparations - PENSION_REPARATIONS_TAX_EXEMPT_SALARY_MAX
     sfund_cash = (STUDY_FUND_EMPLOYEE + STUDY_FUND_EMPLOYER) * (social_salary if full_study_fund else min(social_salary, STUDY_FUND_TAX_EXEMPT_MAX))
     total_monthly_income = netto_salary + reparations_cash + sfund_cash
     total_monthly_income = postprocess(total_monthly_income)
