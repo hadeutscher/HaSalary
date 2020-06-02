@@ -98,7 +98,6 @@ def main():
 
     # Income Tax
     salary_for_income = salary + tax_worth_features - tax_worth_expenses
-    salary_for_income -= STUDY_FUND_EMPLOYEE * min(social_salary, STUDY_FUND_TAX_EXEMPT_MAX)
     in_tax = income_tax(salary_for_income, tax_pts)
     in_tax -= PENSION_REIMBURSE * min(pens, PENSION_REIMBURSE_PAYMENTS_MAX)
 
