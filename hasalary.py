@@ -36,10 +36,14 @@ STUDY_FUND_TAX_EXEMPT_MAX = 15712 # Section 3(e)
 REPARATIONS_PULL_TAX_EXEMPT_MAX = 12420 / 12 # Section 7a(a)(2)
 
 ### National Insurance law ###
-# Right hand is National Insurance and Health Insurance, respectively
 NATIONAL_INSURANCE_STEPS = [
-    (AVERAGE_SALARY * 0.6, 0.004 + 0.031),
-    (44020, 0.07 + 0.05)
+    (AVERAGE_SALARY * 0.6, 0.004),
+    (44020, 0.07)
+    ]
+
+HEALTH_INSURANCE_STEPS = [
+    (AVERAGE_SALARY * 0.6, 0.031),
+    (44020, 0.05)
     ]
 
 def tax_steps(s, steps):
@@ -59,6 +63,9 @@ def income_tax(s, pts):
 
 def national_insurance(s):
     return tax_steps(s, NATIONAL_INSURANCE_STEPS)
+
+def health_insurance(s):
+    return tax_steps(s, HEALTH_INSURANCE_STEPS)
 
 postprocess = lambda x: x
 
@@ -95,6 +102,7 @@ def main():
     # National Insurance
     salary_for_natins = salary + tax_worth_features
     natins_tax = national_insurance(salary_for_natins)
+    healthins_tax = health_insurance(salary_for_natins)
 
     # Income Tax
     salary_for_income = salary + tax_worth_features - tax_worth_expenses
@@ -102,10 +110,11 @@ def main():
     in_tax -= PENSION_REIMBURSE * min(pens, PENSION_REIMBURSE_PAYMENTS_MAX)
 
     # Part 1 (paycheck)
-    netto_salary = salary - in_tax - natins_tax - pens - sfund
+    netto_salary = salary - in_tax - natins_tax - healthins_tax - pens - sfund
     print("---Paycheck details---")
     print(f"Income tax: {round(in_tax)} from a salary of {round(salary_for_income)} with {tax_pts} points")
     print(f"National Insurance: {round(natins_tax)} from a salary of {round(salary_for_natins)}")
+    print(f"Health Insurance: {round(healthins_tax)} from a salary of {round(salary_for_natins)}")
     print(f"Pension: {round(pens)} from a salary of {round(social_salary)}")
     print(f"Study Fund: {round(sfund)} from a salary of {round(social_salary)}")
     print(f"Salary (Net): {round(netto_salary)}")
