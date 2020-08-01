@@ -46,6 +46,11 @@ HEALTH_INSURANCE_STEPS = [
     (44020, 0.05)
     ]
 
+EMPLOYER_NATIONAL_INSURANCE_STEPS = [
+    (AVERAGE_SALARY * 0.6, 0.0355),
+    (44020, 0.076)
+    ]
+
 def tax_steps(s, steps):
     tax = 0
     last_step = 0
@@ -59,13 +64,6 @@ def tax_steps(s, steps):
 
 def income_tax(s, pts):
     return max(tax_steps(s, INCOME_TAX_STEPS) - (INCOME_TAX_POINT_WORTH * pts), 0)
-
-
-def national_insurance(s):
-    return tax_steps(s, NATIONAL_INSURANCE_STEPS)
-
-def health_insurance(s):
-    return tax_steps(s, HEALTH_INSURANCE_STEPS)
 
 postprocess = lambda x: x
 
@@ -101,8 +99,8 @@ def main():
 
     # National Insurance
     salary_for_natins = salary + tax_worth_features
-    natins_tax = national_insurance(salary_for_natins)
-    healthins_tax = health_insurance(salary_for_natins)
+    natins_tax = tax_steps(salary_for_natins, NATIONAL_INSURANCE_STEPS)
+    healthins_tax = tax_steps(salary_for_natins, HEALTH_INSURANCE_STEPS)
 
     # Income Tax
     salary_for_income = salary + tax_worth_features - tax_worth_expenses
@@ -124,12 +122,14 @@ def main():
     reparations_cash = min(reparations, REPARATIONS_PULL_TAX_EXEMPT_MAX)
     if reparations > PENSION_REPARATIONS_TAX_EXEMPT_SALARY_MAX:
         reparations_cash += reparations - PENSION_REPARATIONS_TAX_EXEMPT_SALARY_MAX
-    sfund_cash = (STUDY_FUND_EMPLOYEE + STUDY_FUND_EMPLOYER) * (social_salary if full_study_fund else min(social_salary, STUDY_FUND_TAX_EXEMPT_MAX))
+    employer_sfund = STUDY_FUND_EMPLOYER * (social_salary if full_study_fund else min(social_salary, STUDY_FUND_TAX_EXEMPT_MAX))
+    sfund_cash = sfund + employer_sfund
     total_monthly_income = netto_salary + reparations_cash + sfund_cash
     total_monthly_income = postprocess(total_monthly_income)
     print("---Other stats---")
     print(f"Reparations cash: {round(reparations_cash)}")
     print(f"Study fund cash: {round(sfund_cash)}")
+    print(f"Total income: {round(total_monthly_income)}")
 
     # Part 3 (savings)
     if target is None:
@@ -142,6 +142,15 @@ def main():
             break
     print(f"{years:.1f} years to reach target of {round(target)} with {round(monthly_gain)} monthly saving")
 
+    # Part 4 (employment cost)
+    if not calculate_employment_cost:
+        return
+    
+    employer_pension = PENSION_EMPLOYER * social_salary
+    employer_natins = tax_steps(salary_for_natins, EMPLOYER_NATIONAL_INSURANCE_STEPS)
+    employment_cost = salary + ten_bis + goods + employer_natins + employer_pension + reparations + employer_sfund
+    print(f"Employment cost: {round(employment_cost)}")
+    
 
 if __name__ == "__main__":
     main()
