@@ -17,16 +17,16 @@ STUDY_FUND_INDEPENDENT = 0.045
 STUDY_FUND_INDEPENDENT_MAX_SALARY = 265000 / 12
 
 ### Income Tax law ###
-INCOME_TAX_POINT_WORTH = 2628 / 12  # Section 33a
+INCOME_TAX_POINT_WORTH = 2616 / 12  # Section 33a
 
 # Section 121
 INCOME_TAX_STEPS = [
-    (75960 / 12, 0.10),
-    (108960 / 12, 0.14),
-    (174960 / 12, 0.20),
-    (243120 / 12, 0.31),
-    (504360 / 12, 0.35),
-    (651600 / 12, 0.47),
+    (75480 / 12, 0.10),
+    (108360 / 12, 0.14),
+    (173880 / 12, 0.20),
+    (241680 / 12, 0.31),
+    (502920 / 12, 0.35),
+    (647640 / 12, 0.47),
     (math.inf, 0.50)
 ]
 
@@ -174,11 +174,23 @@ def main():
         reparations_cash = min(reparations, REPARATIONS_PULL_TAX_EXEMPT_MAX)
         if reparations > PENSION_REPARATIONS_TAX_EXEMPT_SALARY_MAX:
             reparations_cash += reparations - PENSION_REPARATIONS_TAX_EXEMPT_SALARY_MAX
+        if include_pension:
+            reparations_cash = reparations
+        elif monthly_reparations_pull and reparations > REPARATIONS_PULL_TAX_EXEMPT_MAX:
+            taxed_reparations = reparations - reparations_cash
+            tax_rate = income_tax(monthly_reparations_pull,
+                                  tax_pts) / monthly_reparations_pull
+            reparations_cash += taxed_reparations * (1 - tax_rate)
         employer_sfund = STUDY_FUND_EMPLOYER * \
             (social_salary if full_study_fund else min(
                 social_salary, STUDY_FUND_TAX_EXEMPT_MAX))
+
     sfund_cash = sfund + employer_sfund
     total_monthly_income = netto_salary + reparations_cash + sfund_cash
+    if include_pension:
+        total_monthly_income += pens
+        if not independent_mode:
+            total_monthly_income += PENSION_EMPLOYER * social_salary
     total_monthly_income2 = postprocess(total_monthly_income)
     print("---Other stats---")
     print(f"Reparations cash: {round(reparations_cash)}")
