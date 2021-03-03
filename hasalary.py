@@ -187,15 +187,15 @@ def main():
                 social_salary, STUDY_FUND_TAX_EXEMPT_MAX))
 
     sfund_cash = sfund + employer_sfund
+    pens_total = pens if independent_mode else (pens + pens_employer)
     total_monthly_income = netto_salary + reparations_cash + sfund_cash
     if include_pension:
-        total_monthly_income += pens
-        if not independent_mode:
-            total_monthly_income += PENSION_EMPLOYER * social_salary
+        total_monthly_income += pens_total
     total_monthly_income2 = postprocess(total_monthly_income)
     print("---Other stats---")
-    print(f"Reparations cash: {round(reparations_cash)}")
-    print(f"Study fund cash: {round(sfund_cash)}")
+    print(f"Pension: {round(pens_total)}")
+    print(f"Reparations: {round(reparations_cash)}")
+    print(f"Study fund: {round(sfund_cash)}")
     print(f"Total income: {round(total_monthly_income)}")
     if total_monthly_income != total_monthly_income2:
         print(f"Total income (post): {round(total_monthly_income2)}")
