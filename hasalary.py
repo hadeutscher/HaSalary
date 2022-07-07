@@ -204,7 +204,7 @@ def main():
     # Part 3 (savings)
     if target is not None:
         monthly_gain = total_monthly_income - monthly_expense
-        monthly_gain_rate = 1 + (yearly_gain_rate - 1) / 12
+        monthly_gain_rate = yearly_gain_rate ** (1 / 12)
         for i in itertools.count():
             if current_cash * monthly_gain_rate ** i + sum(monthly_gain * monthly_gain_rate ** j for j in range(i)) >= target:
                 years = i / 12
