@@ -1,0 +1,45 @@
+import math
+
+### Universal constants ###
+AVERAGE_SALARY = 10551
+STUDY_FUND_EMPLOYEE = 0.025
+STUDY_FUND_EMPLOYER = 0.075
+
+### Income Tax law ###
+INCOME_TAX_POINT_WORTH = 2616 / 12  # Section 33a
+
+# Section 121
+INCOME_TAX_STEPS = [
+    (75480 / 12, 0.10),
+    (108360 / 12, 0.14),
+    (173880 / 12, 0.20),
+    (241680 / 12, 0.31),
+    (502920 / 12, 0.35),
+    (647640 / 12, 0.47),
+    (math.inf, 0.50)
+]
+
+PENSION_REIMBURSE = 0.35  # Section 45a(b)
+# Section 47(a)(1), also see 45a(d)(2)(b)(2), 45a(e)(2)(b)(2)(a)
+PENSION_REIMBURSE_PAYMENTS_MAX = 104400 * 0.07 / 12
+PENSION_EMPLOYER_TAX_EXEMPT_PAYMENTS_MAX = (
+    AVERAGE_SALARY * 2.5) * 0.075  # Section 3(e3)(2)
+PENSION_REPARATIONS_TAX_EXEMPT_PAYMENTS_MAX = 34900 / 12  # Section 3(e3)(2)
+STUDY_FUND_TAX_EXEMPT_MAX = 15712  # Section 3(e)
+REPARATIONS_PULL_TAX_EXEMPT_MAX = 12340 / 12  # Section 9(7a)(a)(2)
+
+### National Insurance law ###
+NATIONAL_INSURANCE_STEPS = [
+    (AVERAGE_SALARY * 0.6, 0.004),
+    (44020, 0.07)
+]
+
+HEALTH_INSURANCE_STEPS = [
+    (AVERAGE_SALARY * 0.6, 0.031),
+    (44020, 0.05)
+]
+
+EMPLOYER_NATIONAL_INSURANCE_STEPS = [
+    (AVERAGE_SALARY * 0.6, 0.0355),
+    (44020, 0.076)
+]
