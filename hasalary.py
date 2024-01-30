@@ -53,7 +53,7 @@ def main():
         salary_for_natins = salary - tax_worth_expenses
 
         # Social paymens
-        salary_for_pens = min(social_salary - tax_worth_expenses, PENSION_INDEPENDENT_MAX_SALARY)
+        salary_for_pens = min(social_salary, PENSION_INDEPENDENT_MAX_SALARY)
         pens_a = PENSION_INDEPENDENT_RATE_WRITEOFF * salary_for_pens
         pens_b = (PENSION_INDEPENDENT_RATE_REIMBURSE + PENSION_INDEPENDENT_RATE_REIMBURSE_ACA) * salary_for_pens
         pens = pens_a + pens_b
@@ -102,6 +102,10 @@ def main():
         salary_for_income = salary + tax_worth_features - tax_worth_expenses
         in_tax = income_tax(salary_for_income, tax_pts)
         in_tax -= PENSION_REIMBURSE * min(pens, PENSION_REIMBURSE_PAYMENTS_MAX)
+
+    if in_tax < 0:
+        print(f"WARNING: got negative income tax, {round(-in_tax)} in tax benefits is wasted")
+        in_tax = 0
 
     # Part 1 (paycheck)
     netto_salary = salary - in_tax - natins_tax - healthins_tax - pens - sfund
