@@ -53,10 +53,9 @@ def main():
         salary_for_natins = salary - tax_worth_expenses
 
         # Social paymens
-        pens_a = min(PENSION_INDEPENDENT_RATE_A * social_salary,
-                     PENSION_INDEPENDENT_RATE_A_MAX)
-        pens_b = min(PENSION_INDEPENDENT_RATE_B * social_salary,
-                     PENSION_INDEPENDENT_RATE_B_MAX)
+        salary_for_pens = min(social_salary - tax_worth_expenses, PENSION_INDEPENDENT_MAX_SALARY)
+        pens_a = PENSION_INDEPENDENT_RATE_WRITEOFF * salary_for_pens
+        pens_b = (PENSION_INDEPENDENT_RATE_REIMBURSE + PENSION_INDEPENDENT_RATE_REIMBURSE_ACA) * salary_for_pens
         pens = pens_a + pens_b
         sfund = STUDY_FUND_INDEPENDENT * \
             min(social_salary, STUDY_FUND_INDEPENDENT_MAX_SALARY)
