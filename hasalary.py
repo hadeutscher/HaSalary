@@ -47,38 +47,62 @@ def main():
         print(f"Tax calculations for {TAX_YEAR} not supported")
         return
 
-    salary = base_salary * percentage + travel_allowance + bonuses
-    tax_worth_features = ten_bis + goods
+    if independent_mode:
+        salary = base_salary * percentage
+        social_salary = salary - tax_worth_expenses
+        salary_for_natins = salary - tax_worth_expenses
 
-    # Social payments
-    social_salary = base_salary * percentage
-    pens = PENSION_EMPLOYEE * social_salary
-    pens_employer = PENSION_EMPLOYER * social_salary
-    if pens_employer > PENSION_EMPLOYER_TAX_EXEMPT_PAYMENTS_MAX:
-        # Zkifat Tagmulim
-        tax_worth_features += pens_employer - PENSION_EMPLOYER_TAX_EXEMPT_PAYMENTS_MAX
-    reparations = PENSION_REPARATIONS * social_salary
-    if reparations > PENSION_REPARATIONS_TAX_EXEMPT_PAYMENTS_MAX:
-        # Zkifat Pitzuiim
-        tax_worth_features += reparations - PENSION_REPARATIONS_TAX_EXEMPT_PAYMENTS_MAX
-    if social_salary > STUDY_FUND_TAX_EXEMPT_MAX and full_study_fund:
-        # Zkifat Hishtalmut
-        tax_worth_features += (social_salary -
-                               STUDY_FUND_TAX_EXEMPT_MAX) * STUDY_FUND_EMPLOYER
-        sfund = STUDY_FUND_EMPLOYEE * social_salary
+        # Social paymens
+        pens_a = min(PENSION_INDEPENDENT_RATE_A * social_salary,
+                     PENSION_INDEPENDENT_RATE_A_MAX)
+        pens_b = min(PENSION_INDEPENDENT_RATE_B * social_salary,
+                     PENSION_INDEPENDENT_RATE_B_MAX)
+        pens = pens_a + pens_b
+        sfund = STUDY_FUND_INDEPENDENT * \
+            min(social_salary, STUDY_FUND_INDEPENDENT_MAX_SALARY)
+
+        # National insurance
+        natins_tax = tax_steps(
+            salary_for_natins, INDEPENDENT_NATIONAL_INSURANCE_STEPS)
+        healthins_tax = tax_steps(salary_for_natins, HEALTH_INSURANCE_STEPS)
+
+        # Income tax
+        salary_for_income = salary - tax_worth_expenses - pens_a - sfund
+        in_tax = income_tax(salary_for_income, tax_pts)
+        in_tax -= PENSION_REIMBURSE * pens_b
     else:
-        sfund = STUDY_FUND_EMPLOYEE * \
-            min(social_salary, STUDY_FUND_TAX_EXEMPT_MAX)
+        salary = base_salary * percentage + travel_allowance + bonuses
+        tax_worth_features = ten_bis + goods
 
-    # National Insurance
-    salary_for_natins = salary + tax_worth_features
-    natins_tax = tax_steps(salary_for_natins, NATIONAL_INSURANCE_STEPS)
-    healthins_tax = tax_steps(salary_for_natins, HEALTH_INSURANCE_STEPS)
+        # Social payments
+        social_salary = base_salary * percentage
+        pens = PENSION_EMPLOYEE * social_salary
+        pens_employer = PENSION_EMPLOYER * social_salary
+        if pens_employer > PENSION_EMPLOYER_TAX_EXEMPT_PAYMENTS_MAX:
+            # Zkifat Tagmulim
+            tax_worth_features += pens_employer - PENSION_EMPLOYER_TAX_EXEMPT_PAYMENTS_MAX
+        reparations = PENSION_REPARATIONS * social_salary
+        if reparations > PENSION_REPARATIONS_TAX_EXEMPT_PAYMENTS_MAX:
+            # Zkifat Pitzuiim
+            tax_worth_features += reparations - PENSION_REPARATIONS_TAX_EXEMPT_PAYMENTS_MAX
+        if social_salary > STUDY_FUND_TAX_EXEMPT_MAX and full_study_fund:
+            # Zkifat Hishtalmut
+            tax_worth_features += (social_salary -
+                                   STUDY_FUND_TAX_EXEMPT_MAX) * STUDY_FUND_EMPLOYER
+            sfund = STUDY_FUND_EMPLOYEE * social_salary
+        else:
+            sfund = STUDY_FUND_EMPLOYEE * \
+                min(social_salary, STUDY_FUND_TAX_EXEMPT_MAX)
 
-    # Income Tax
-    salary_for_income = salary + tax_worth_features - tax_worth_expenses
-    in_tax = income_tax(salary_for_income, tax_pts)
-    in_tax -= PENSION_REIMBURSE * min(pens, PENSION_REIMBURSE_PAYMENTS_MAX)
+        # National Insurance
+        salary_for_natins = salary + tax_worth_features
+        natins_tax = tax_steps(salary_for_natins, NATIONAL_INSURANCE_STEPS)
+        healthins_tax = tax_steps(salary_for_natins, HEALTH_INSURANCE_STEPS)
+
+        # Income Tax
+        salary_for_income = salary + tax_worth_features - tax_worth_expenses
+        in_tax = income_tax(salary_for_income, tax_pts)
+        in_tax -= PENSION_REIMBURSE * min(pens, PENSION_REIMBURSE_PAYMENTS_MAX)
 
     # Part 1 (paycheck)
     netto_salary = salary - in_tax - natins_tax - healthins_tax - pens - sfund
@@ -96,22 +120,26 @@ def main():
     print("-------------------------------------")
 
     # Part 2 (total income)
-    reparations_cash = min(reparations, REPARATIONS_PULL_TAX_EXEMPT_MAX)
-    if reparations > PENSION_REPARATIONS_TAX_EXEMPT_PAYMENTS_MAX:
-        reparations_cash += reparations - PENSION_REPARATIONS_TAX_EXEMPT_PAYMENTS_MAX
-    if include_pension:
-        reparations_cash = reparations
-    elif monthly_reparations_pull and reparations > REPARATIONS_PULL_TAX_EXEMPT_MAX:
-        taxed_reparations = reparations - reparations_cash
-        tax_rate = income_tax(monthly_reparations_pull,
-                              tax_pts) / monthly_reparations_pull
-        reparations_cash += taxed_reparations * (1 - tax_rate)
-    employer_sfund = STUDY_FUND_EMPLOYER * \
-        (social_salary if full_study_fund else min(
-            social_salary, STUDY_FUND_TAX_EXEMPT_MAX))
+    if independent_mode:
+        reparations_cash = 0
+        employer_sfund = 0
+    else:
+        reparations_cash = min(reparations, REPARATIONS_PULL_TAX_EXEMPT_MAX)
+        if reparations > PENSION_REPARATIONS_TAX_EXEMPT_PAYMENTS_MAX:
+            reparations_cash += reparations - PENSION_REPARATIONS_TAX_EXEMPT_PAYMENTS_MAX
+        if include_pension:
+            reparations_cash = reparations
+        elif monthly_reparations_pull and reparations > REPARATIONS_PULL_TAX_EXEMPT_MAX:
+            taxed_reparations = reparations - reparations_cash
+            tax_rate = income_tax(monthly_reparations_pull,
+                                  tax_pts) / monthly_reparations_pull
+            reparations_cash += taxed_reparations * (1 - tax_rate)
+        employer_sfund = STUDY_FUND_EMPLOYER * \
+            (social_salary if full_study_fund else min(
+                social_salary, STUDY_FUND_TAX_EXEMPT_MAX))
 
     sfund_cash = sfund + employer_sfund
-    pens_total = pens + pens_employer
+    pens_total = pens if independent_mode else (pens + pens_employer)
     total_monthly_income = netto_salary + reparations_cash + sfund_cash
     if include_pension:
         total_monthly_income += pens_total
@@ -136,7 +164,7 @@ def main():
         print(f"{years:.1f} years to reach target of {round(target)} with {round(monthly_gain)} monthly saving")
 
     # Part 4 (employment cost)
-    if calculate_employment_cost:
+    if not independent_mode and calculate_employment_cost:
         employer_pension = PENSION_EMPLOYER * social_salary
         employer_natins = tax_steps(
             salary_for_natins, EMPLOYER_NATIONAL_INSURANCE_STEPS)
