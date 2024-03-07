@@ -62,7 +62,6 @@ def main():
     if independent_mode:
         salary = base_salary * percentage
         social_salary = salary - tax_worth_expenses
-        salary_for_natins = salary - tax_worth_expenses
 
         # Social paymens
         salary_for_pens = min(social_salary, PENSION_INDEPENDENT_MAX_SALARY)
@@ -76,6 +75,7 @@ def main():
         )
 
         # National insurance
+        salary_for_natins = salary - tax_worth_expenses - pens_a - sfund
         natins_tax = tax_steps(salary_for_natins, INDEPENDENT_NATIONAL_INSURANCE_STEPS)
         healthins_tax = tax_steps(salary_for_natins, HEALTH_INSURANCE_STEPS)
 
