@@ -9,6 +9,8 @@ import itertools
 import argparse
 import os.path
 
+# Income tax law, section 47a(a)
+NATIONAL_INSURANCE_INDEPENDENT_WRITEOFF_RATE = 0.52
 
 def tax_steps(s, steps):
     tax = 0
@@ -66,7 +68,7 @@ def main():
         healthins_tax = tax_steps(salary_for_natins, HEALTH_INSURANCE_STEPS)
 
         # Income tax
-        salary_for_income = salary - tax_worth_expenses - pens_a - sfund
+        salary_for_income = salary - tax_worth_expenses - pens_a - sfund - natins_tax * NATIONAL_INSURANCE_INDEPENDENT_WRITEOFF_RATE
         in_tax = income_tax(salary_for_income, tax_pts)
         in_tax -= PENSION_REIMBURSE * pens_b
     else:
