@@ -25,7 +25,7 @@ def tax_steps(s, steps):
 
 
 def income_tax(s, pts):
-    return max(tax_steps(s, INCOME_TAX_STEPS) - (INCOME_TAX_POINT_WORTH * pts), 0)
+    return tax_steps(s, INCOME_TAX_STEPS) - (INCOME_TAX_POINT_WORTH * pts)
 
 
 def postprocess(x):
