@@ -76,10 +76,8 @@ def impl(social_salary, non_social_salary, params, consts) -> Result:
         pens_employer = None
         reparations = None
 
-        tax_worth_expenses = params["tax_worth_expenses"]
-
         # National insurance
-        salary_for_natins = salary - tax_worth_expenses - pens_a - sfund
+        salary_for_natins = salary - pens_a - sfund
         natins_tax = tax_steps(
             salary_for_natins, consts["INDEPENDENT_NATIONAL_INSURANCE_STEPS"]
         )
@@ -87,12 +85,11 @@ def impl(social_salary, non_social_salary, params, consts) -> Result:
         natins_writeoff = natins_tax * NATIONAL_INSURANCE_INDEPENDENT_WRITEOFF_RATE
 
         # Income tax
-        tax["deduction tax_worth_expenses"] = tax_worth_expenses
         tax["deduction pens_a"] = pens_a
         tax["deduction sfund"] = sfund
         tax["deduction natins_writeoff"] = natins_writeoff
         salary_for_income = (
-            salary - tax_worth_expenses - pens_a - sfund - natins_writeoff
+            salary - pens_a - sfund - natins_writeoff
         )
         in_tax = income_tax(salary_for_income, params["tax_pts"], consts)
         pens_b_re = consts["PENSION_REIMBURSE"] * pens_b
