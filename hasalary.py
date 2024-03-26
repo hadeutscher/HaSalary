@@ -9,6 +9,7 @@ from dataclasses import dataclass, fields, replace
 import itertools
 import argparse
 import os.path
+import logging
 
 # Income tax law, section 47a(a)
 NATIONAL_INSURANCE_INDEPENDENT_WRITEOFF_RATE = 0.52
@@ -36,7 +37,7 @@ def postprocess(x):
 
 
 @dataclass
-class Result:
+class Details:
     salary: float
     in_tax: float
     natins_tax: float
@@ -51,7 +52,14 @@ class Result:
     netto_salary: float
 
 
-def impl(social_salary, non_social_salary, params, consts):
+@dataclass
+class Result:
+    details: Details
+    tax_values: dict[str, float]
+
+
+def impl(social_salary, non_social_salary, params, consts) -> Result:
+    tax = dict()
     salary = social_salary + non_social_salary
     if params["independent_mode"]:
         # Social paymens
@@ -68,25 +76,31 @@ def impl(social_salary, non_social_salary, params, consts):
         pens_employer = None
         reparations = None
 
+        tax_worth_expenses = params["tax_worth_expenses"]
+
         # National insurance
-        salary_for_natins = salary - params["tax_worth_expenses"] - pens_a - sfund
+        salary_for_natins = salary - tax_worth_expenses - pens_a - sfund
         natins_tax = tax_steps(
             salary_for_natins, consts["INDEPENDENT_NATIONAL_INSURANCE_STEPS"]
         )
         healthins_tax = tax_steps(salary_for_natins, consts["HEALTH_INSURANCE_STEPS"])
+        natins_writeoff = natins_tax * NATIONAL_INSURANCE_INDEPENDENT_WRITEOFF_RATE
 
         # Income tax
+        tax["deduction tax_worth_expenses"] = tax_worth_expenses
+        tax["deduction pens_a"] = pens_a
+        tax["deduction sfund"] = sfund
+        tax["deduction natins_writeoff"] = natins_writeoff
         salary_for_income = (
-            salary
-            - params["tax_worth_expenses"]
-            - pens_a
-            - sfund
-            - natins_tax * NATIONAL_INSURANCE_INDEPENDENT_WRITEOFF_RATE
+            salary - tax_worth_expenses - pens_a - sfund - natins_writeoff
         )
         in_tax = income_tax(salary_for_income, params["tax_pts"], consts)
-        in_tax -= consts["PENSION_REIMBURSE"] * pens_b
+        pens_b_re = consts["PENSION_REIMBURSE"] * pens_b
+        tax["reimburse pens_b_re"] = pens_b_re
+        in_tax -= pens_b_re
     else:
         tax_worth_features = params["ten_bis"] + params["goods"]
+        tax["worth tax_worth_features"] = tax_worth_features
 
         # Social payments
         salary_for_pens = social_salary
@@ -94,23 +108,29 @@ def impl(social_salary, non_social_salary, params, consts):
         pens_employer = params["PENSION_EMPLOYER"] * salary_for_pens
         if pens_employer > consts["PENSION_EMPLOYER_TAX_EXEMPT_PAYMENTS_MAX"]:
             # Zkifat Tagmulim
-            tax_worth_features += (
+            pens_employer_taxed = (
                 pens_employer - consts["PENSION_EMPLOYER_TAX_EXEMPT_PAYMENTS_MAX"]
             )
+            tax["worth pens_employer_taxed"] = pens_employer_taxed
+            tax_worth_features += pens_employer_taxed
         reparations = params["PENSION_REPARATIONS"] * salary_for_pens
         if reparations > consts["PENSION_REPARATIONS_TAX_EXEMPT_PAYMENTS_MAX"]:
             # Zkifat Pitzuiim
-            tax_worth_features += (
+            reparations_taxed = (
                 reparations - consts["PENSION_REPARATIONS_TAX_EXEMPT_PAYMENTS_MAX"]
             )
+            tax["worth reparations_taxed"] = reparations_taxed
+            tax_worth_features += reparations_taxed
         if (
             social_salary > consts["STUDY_FUND_TAX_EXEMPT_MAX"]
             and params["full_study_fund"]
         ):
             # Zkifat Hishtalmut
-            tax_worth_features += (
+            sfund_taxed = (
                 social_salary - consts["STUDY_FUND_TAX_EXEMPT_MAX"]
             ) * consts["STUDY_FUND_EMPLOYER"]
+            tax_worth_features += sfund_taxed
+            tax["worth sfund_taxed"] = sfund_taxed
             sfund = consts["STUDY_FUND_EMPLOYEE"] * social_salary
         else:
             sfund = consts["STUDY_FUND_EMPLOYEE"] * min(
@@ -125,12 +145,14 @@ def impl(social_salary, non_social_salary, params, consts):
         # Income Tax
         salary_for_income = salary + tax_worth_features
         in_tax = income_tax(salary_for_income, params["tax_pts"], consts)
-        in_tax -= consts["PENSION_REIMBURSE"] * min(
+        pension_re = consts["PENSION_REIMBURSE"] * min(
             pens, consts["PENSION_REIMBURSE_PAYMENTS_MAX"]
         )
+        tax["reimburse pension_re"] = pension_re
+        in_tax -= pension_re
 
     netto_salary = salary - in_tax - natins_tax - healthins_tax - pens - sfund
-    return Result(
+    details = Details(
         salary,
         in_tax,
         natins_tax,
@@ -144,24 +166,29 @@ def impl(social_salary, non_social_salary, params, consts):
         salary_for_pens,
         netto_salary,
     )
+    return Result(details, tax)
 
 
 def result_filter(params, result: Result) -> Result:
-    for field in fields(result):
-        value = getattr(result, field.name)
+    details = result.details
+    for field in fields(details):
+        value = getattr(details, field.name)
         if value is None:
             continue
         if params["annual_numbers"]:
             value *= 12
-        result = replace(result, **{field.name: round(value)})
+        details = replace(details, **{field.name: round(value)})
 
-    if result.in_tax < 0:
-        print(
-            f"WARNING: got negative income tax, {round(-result.in_tax)} in tax benefits is wasted"
+    if details.in_tax < 0:
+        logging.getLogger().warn(
+            f"got negative income tax, {round(-result.in_tax)} in tax benefits is wasted"
         )
-        result.in_tax = 0
+        details.in_tax = 0
 
-    return result
+    tax_values = dict(result.tax_values)
+    if params["annual_numbers"]:
+        tax_values = {k: v * 12 for k, v in tax_values.items()}
+    return Result(details, tax_values)
 
 
 def params_filter(params):
@@ -188,7 +215,13 @@ def main():
     # Loading config
     parser = argparse.ArgumentParser()
     parser.add_argument("config", type=str, help="config to be used")
+    parser.add_argument("-v", "--verbose", action="store_true", help="extra logs")
     args = parser.parse_args()
+
+    logging.basicConfig()
+    logging.getLogger().setLevel(logging.DEBUG if args.verbose else logging.INFO)
+    log = logging.getLogger()
+
     with open(f"{args.config}", "r", encoding="utf-8") as f:
         params = {}
         exec(f.read(), params)
@@ -206,7 +239,7 @@ def main():
             consts = {}
             exec(f.read(), consts)
     except FileNotFoundError:
-        print(f"Tax calculations for {params['TAX_YEAR']} not supported")
+        log.error(f"Tax calculations for {params['TAX_YEAR']} not supported")
         return
 
     params = params_filter(params)
@@ -223,54 +256,59 @@ def main():
     rate = [
         rate
         for ceiling, rate in consts["INCOME_TAX_STEPS"]
-        if result.salary_for_income < ceiling
+        if result.details.salary_for_income < ceiling
     ][0]
     result2 = impl(social_salary + 1, non_social_salary, params, consts)
-    effrate = result2.in_tax - result.in_tax
+    effrate = result2.details.in_tax - result.details.in_tax
     effrate_text = (
         f"; effective marginal rate {effrate:.2f}" if (rate - effrate) >= 0.01 else ""
     )
 
     result_pretty = result_filter(params, result)
+    log_tax = logging.getLogger("taxes")
+    for k, v in result_pretty.tax_values.items():
+        log_tax.debug(f"{k}={v}")
+    details_pretty = result_pretty.details
 
     # Part 1 (paycheck)
     print("---Paycheck details---")
     print(
-        f"Income tax: {result_pretty.in_tax} from a salary of {result_pretty.salary_for_income} (marginal rate {rate}{effrate_text})"
+        f"Income tax: {details_pretty.in_tax} from a salary of {details_pretty.salary_for_income} (marginal rate {rate}{effrate_text})"
     )
     print(
-        f"National Insurance: {result_pretty.natins_tax} from a salary of {result_pretty.salary_for_natins}"
+        f"National Insurance: {details_pretty.natins_tax} from a salary of {details_pretty.salary_for_natins}"
     )
     print(
-        f"Health Insurance: {result_pretty.healthins_tax} from a salary of {result_pretty.salary_for_natins}"
+        f"Health Insurance: {details_pretty.healthins_tax} from a salary of {details_pretty.salary_for_natins}"
     )
     print(
-        f"Pension: {result_pretty.pens} from a salary of {result_pretty.salary_for_pens}"
+        f"Pension: {details_pretty.pens} from a salary of {details_pretty.salary_for_pens}"
     )
-    print(f"Study Fund: {result_pretty.sfund}")
-    print(f"Salary (Net): {result_pretty.netto_salary}")
+    print(f"Study Fund: {details_pretty.sfund}")
+    print(f"Salary (Net): {details_pretty.netto_salary}")
     print("-------------------------------------")
 
     # Part 2 (total income)
+    details = result.details
     if params["independent_mode"]:
         reparations_cash = 0
         employer_sfund = 0
     else:
         reparations_cash = min(
-            result.reparations, consts["REPARATIONS_PULL_TAX_EXEMPT_MAX"]
+            details.reparations, consts["REPARATIONS_PULL_TAX_EXEMPT_MAX"]
         )
-        if result.reparations > consts["PENSION_REPARATIONS_TAX_EXEMPT_PAYMENTS_MAX"]:
+        if details.reparations > consts["PENSION_REPARATIONS_TAX_EXEMPT_PAYMENTS_MAX"]:
             reparations_cash += (
-                result.reparations
+                details.reparations
                 - consts["PENSION_REPARATIONS_TAX_EXEMPT_PAYMENTS_MAX"]
             )
         if params["include_pension"]:
-            reparations_cash = result.reparations
+            reparations_cash = details.reparations
         elif (
             params["monthly_reparations_pull"]
-            and result.reparations > consts["REPARATIONS_PULL_TAX_EXEMPT_MAX"]
+            and details.reparations > consts["REPARATIONS_PULL_TAX_EXEMPT_MAX"]
         ):
-            taxed_reparations = result.reparations - reparations_cash
+            taxed_reparations = details.reparations - reparations_cash
             tax_rate = (
                 income_tax(
                     params["monthly_reparations_pull"], params["tax_pts"], consts
@@ -284,13 +322,13 @@ def main():
             else min(social_salary, consts["STUDY_FUND_TAX_EXEMPT_MAX"])
         )
 
-    sfund_cash = result.sfund + employer_sfund
+    sfund_cash = details.sfund + employer_sfund
     pens_total = (
-        result.pens
+        details.pens
         if params["independent_mode"]
-        else (result.pens + result.pens_employer)
+        else (details.pens + details.pens_employer)
     )
-    total_monthly_income = result.netto_salary + reparations_cash + sfund_cash
+    total_monthly_income = details.netto_salary + reparations_cash + sfund_cash
     if params["include_pension"]:
         total_monthly_income += pens_total
     total_monthly_income2 = postprocess(total_monthly_income)
@@ -330,15 +368,15 @@ def main():
     if not params["independent_mode"] and params["calculate_employment_cost"]:
         employer_pension = params["PENSION_EMPLOYER"] * social_salary
         employer_natins = tax_steps(
-            result.salary_for_natins, consts["EMPLOYER_NATIONAL_INSURANCE_STEPS"]
+            details.salary_for_natins, consts["EMPLOYER_NATIONAL_INSURANCE_STEPS"]
         )
         employment_cost = (
-            result.salary
+            details.salary
             + params["ten_bis"]
             + params["goods"]
             + employer_natins
             + employer_pension
-            + result.reparations
+            + details.reparations
             + employer_sfund
         )
         print(f"Employment cost: {round(employment_cost)}")
