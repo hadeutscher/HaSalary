@@ -5,7 +5,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields, replace
 import itertools
 import argparse
 import os.path
@@ -47,7 +47,8 @@ class Result:
     sfund: float
     salary_for_income: float
     salary_for_natins: float
-    social_salary: float
+    salary_for_pens: float
+    netto_salary: float
 
 
 def impl(social_salary, non_social_salary, params, consts):
@@ -88,15 +89,15 @@ def impl(social_salary, non_social_salary, params, consts):
         tax_worth_features = params["ten_bis"] + params["goods"]
 
         # Social payments
-        social_salary = params["base_salary"] * params["percentage"]
-        pens = params["PENSION_EMPLOYEE"] * social_salary
-        pens_employer = params["PENSION_EMPLOYER"] * social_salary
+        salary_for_pens = social_salary
+        pens = params["PENSION_EMPLOYEE"] * salary_for_pens
+        pens_employer = params["PENSION_EMPLOYER"] * salary_for_pens
         if pens_employer > consts["PENSION_EMPLOYER_TAX_EXEMPT_PAYMENTS_MAX"]:
             # Zkifat Tagmulim
             tax_worth_features += (
                 pens_employer - consts["PENSION_EMPLOYER_TAX_EXEMPT_PAYMENTS_MAX"]
             )
-        reparations = params["PENSION_REPARATIONS"] * social_salary
+        reparations = params["PENSION_REPARATIONS"] * salary_for_pens
         if reparations > consts["PENSION_REPARATIONS_TAX_EXEMPT_PAYMENTS_MAX"]:
             # Zkifat Pitzuiim
             tax_worth_features += (
@@ -128,12 +129,7 @@ def impl(social_salary, non_social_salary, params, consts):
             pens, consts["PENSION_REIMBURSE_PAYMENTS_MAX"]
         )
 
-    if in_tax < 0:
-        print(
-            f"WARNING: got negative income tax, {round(-in_tax)} in tax benefits is wasted"
-        )
-        in_tax = 0
-
+    netto_salary = salary - in_tax - natins_tax - healthins_tax - pens - sfund
     return Result(
         salary,
         in_tax,
@@ -145,8 +141,47 @@ def impl(social_salary, non_social_salary, params, consts):
         sfund,
         salary_for_income,
         salary_for_natins,
-        social_salary,
+        salary_for_pens,
+        netto_salary,
     )
+
+
+def result_filter(params, result: Result) -> Result:
+    for field in fields(result):
+        value = getattr(result, field.name)
+        if value is None:
+            continue
+        if params["annual_numbers"]:
+            value *= 12
+        result = replace(result, **{field.name: round(value)})
+
+    if result.in_tax < 0:
+        print(
+            f"WARNING: got negative income tax, {round(-result.in_tax)} in tax benefits is wasted"
+        )
+        result.in_tax = 0
+
+    return result
+
+
+def params_filter(params):
+    if not params["annual_numbers"]:
+        return params
+
+    params = dict(params)
+    params.update(
+        (key, params[key] / 12)
+        for key in [
+            "base_salary",
+            "travel_allowance",
+            "bonuses",
+            "ten_bis",
+            "goods",
+            "tax_worth_expenses",
+        ]
+        if key in params
+    )
+    return params
 
 
 def main():
@@ -174,6 +209,8 @@ def main():
         print(f"Tax calculations for {params['TAX_YEAR']} not supported")
         return
 
+    params = params_filter(params)
+
     if params["independent_mode"]:
         social_salary = params["base_salary"] - params["tax_worth_expenses"]
         non_social_salary = 0
@@ -183,15 +220,6 @@ def main():
 
     result = impl(social_salary, non_social_salary, params, consts)
 
-    # Part 1 (paycheck)
-    netto_salary = (
-        result.salary
-        - result.in_tax
-        - result.natins_tax
-        - result.healthins_tax
-        - result.pens
-        - result.sfund
-    )
     rate = [
         rate
         for ceiling, rate in consts["INCOME_TAX_STEPS"]
@@ -202,19 +230,25 @@ def main():
     effrate_text = (
         f"; effective marginal rate {effrate:.2f}" if (rate - effrate) >= 0.01 else ""
     )
+
+    result_pretty = result_filter(params, result)
+
+    # Part 1 (paycheck)
     print("---Paycheck details---")
     print(
-        f"Income tax: {round(result.in_tax)} from a salary of {round(result.salary_for_income)} (marginal rate {rate}{effrate_text})"
+        f"Income tax: {result_pretty.in_tax} from a salary of {result_pretty.salary_for_income} (marginal rate {rate}{effrate_text})"
     )
     print(
-        f"National Insurance: {round(result.natins_tax)} from a salary of {round(result.salary_for_natins)}"
+        f"National Insurance: {result_pretty.natins_tax} from a salary of {result_pretty.salary_for_natins}"
     )
     print(
-        f"Health Insurance: {round(result.healthins_tax)} from a salary of {round(result.salary_for_natins)}"
+        f"Health Insurance: {result_pretty.healthins_tax} from a salary of {result_pretty.salary_for_natins}"
     )
-    print(f"Pension: {round(result.pens)} from a salary of {round(social_salary)}")
-    print(f"Study Fund: {round(result.sfund)} from a salary of {round(social_salary)}")
-    print(f"Salary (Net): {round(netto_salary)}")
+    print(
+        f"Pension: {result_pretty.pens} from a salary of {result_pretty.salary_for_pens}"
+    )
+    print(f"Study Fund: {result_pretty.sfund}")
+    print(f"Salary (Net): {result_pretty.netto_salary}")
     print("-------------------------------------")
 
     # Part 2 (total income)
@@ -256,17 +290,24 @@ def main():
         if params["independent_mode"]
         else (result.pens + result.pens_employer)
     )
-    total_monthly_income = netto_salary + reparations_cash + sfund_cash
+    total_monthly_income = result.netto_salary + reparations_cash + sfund_cash
     if params["include_pension"]:
         total_monthly_income += pens_total
     total_monthly_income2 = postprocess(total_monthly_income)
+
+    if params["annual_numbers"]:
+        pens_total *= 12
+        reparations_cash *= 12
+        sfund_cash *= 12
     print("---Other stats---")
     print(f"Pension: {round(pens_total)}")
     print(f"Reparations: {round(reparations_cash)}")
     print(f"Study fund: {round(sfund_cash)}")
-    print(f"Total income: {round(total_monthly_income)}")
+    print(f"Total monthly income: {round(total_monthly_income)}")
+    print(f"Total annual income: {round(total_monthly_income * 12)}")
     if total_monthly_income != total_monthly_income2:
-        print(f"Total income (post): {round(total_monthly_income2)}")
+        print(f"Total monthly income (post): {round(total_monthly_income2)}")
+        print(f"Total annual income (post): {round(total_monthly_income2 * 12)}")
         total_monthly_income = total_monthly_income2
 
     # Part 3 (savings)
