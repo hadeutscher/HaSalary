@@ -246,7 +246,7 @@ def main():
 
     if params["independent_mode"]:
         social_salary = params["base_salary"] - params["tax_worth_expenses"]
-        non_social_salary = 0
+        non_social_salary = params["tax_worth_expenses"]
     else:
         social_salary = params["base_salary"] * params["percentage"]
         non_social_salary = params["travel_allowance"] + params["bonuses"]
