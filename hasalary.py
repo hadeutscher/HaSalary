@@ -192,10 +192,16 @@ def main():
         - result.pens
         - result.sfund
     )
-    rate = [rate for ceiling, rate in consts['INCOME_TAX_STEPS'] if result.salary_for_income < ceiling][0]
+    rate = [
+        rate
+        for ceiling, rate in consts["INCOME_TAX_STEPS"]
+        if result.salary_for_income < ceiling
+    ][0]
     result2 = impl(social_salary + 1, non_social_salary, params, consts)
     effrate = result2.in_tax - result.in_tax
-    effrate_text = f"; effective marginal rate {effrate:.2f}" if (rate - effrate) >= 0.01 else ""
+    effrate_text = (
+        f"; effective marginal rate {effrate:.2f}" if (rate - effrate) >= 0.01 else ""
+    )
     print("---Paycheck details---")
     print(
         f"Income tax: {round(result.in_tax)} from a salary of {round(result.salary_for_income)} (marginal rate {rate}{effrate_text})"
