@@ -8,6 +8,7 @@
 from dataclasses import dataclass, fields, replace
 import itertools
 import argparse
+import math
 import os.path
 import logging
 
@@ -237,11 +238,51 @@ def params_filter(params):
     return params
 
 
+@dataclass
+class RatesResult:
+    income_rate: float
+    natins_rate: float
+    healthins_rate: float
+    total_rate: float
+
+
+def calculate_effective_marginal_rate(
+    base: float, result1: Result, result2: Result
+) -> RatesResult:
+    if (
+        result1.details.pens_employer is not None
+        and result1.details.sfund_employer is not None
+        and result1.details.reparations is not None
+        and result2.details.pens_employer is not None
+        and result2.details.sfund_employer is not None
+        and result2.details.reparations is not None
+    ):
+        assert result2.details.pens_employer >= result1.details.pens_employer
+        assert result2.details.sfund_employer >= result1.details.sfund_employer
+        assert result2.details.reparations >= result1.details.reparations
+        base += (
+            (result2.details.pens_employer - result1.details.pens_employer)
+            + (result2.details.sfund_employer - result1.details.sfund_employer)
+            + (result2.details.reparations - result1.details.reparations)
+        )
+    if result1.details.in_tax <= 0 and result1.details.in_tax <= 0:
+        income_rate = 0
+    else:
+        income_rate = (result2.details.in_tax - result1.details.in_tax) / base
+    natins_rate = (result2.details.natins_tax - result1.details.natins_tax) / base
+    healthins_rate = (
+        result2.details.healthins_tax - result1.details.healthins_tax
+    ) / base
+    total_rate = income_rate + natins_rate + healthins_rate
+    return RatesResult(income_rate, natins_rate, healthins_rate, total_rate)
+
+
 def main():
     # Loading config
     parser = argparse.ArgumentParser()
     parser.add_argument("config", type=str, help="config to be used")
     parser.add_argument("-v", "--verbose", action="store_true", help="extra logs")
+    parser.add_argument("-s", "--steps", action="store_true", help="extra logs")
     args = parser.parse_args()
 
     logging.basicConfig()
@@ -270,6 +311,47 @@ def main():
 
     params = params_filter(params)
 
+    if args.steps:
+        print("---Tax steps analysis---")
+        last_step = [
+            ceiling for ceiling, _ in consts["INCOME_TAX_STEPS"] if ceiling < math.inf
+        ][-1]
+        last_rate = None
+        last_rate_floor = 0
+        params_clean = dict(params)
+        params_clean.update(tax_worth_expenses=0, ten_bis=0, goods=0)
+        output_filter = (
+            (lambda x: round(x * 12))
+            if params["annual_numbers"]
+            else (lambda x: round(x))
+        )
+        for income in range(int(last_step) * 12 * 2):
+            income /= 12
+            result1 = impl(income, 0, params_clean, consts)
+            result2 = impl(income + 1 / 12, 0, params_clean, consts)
+            effrate = calculate_effective_marginal_rate(1 / 12, result1, result2)
+            if args.verbose:
+                for result in (result1, result2):
+                    log_tax = logging.getLogger("taxes")
+                    result_pretty = result_filter(params, result)
+                    for k, v in result_pretty.tax_values.items():
+                        log_tax.debug(f"{k}={v}")
+
+            if last_rate is None:
+                last_rate = effrate
+                last_rate_floor = income
+            elif abs(effrate.total_rate - last_rate.total_rate) >= 0.01:
+                if income - last_rate_floor > 10:
+                    print(
+                        f"{output_filter(last_rate_floor)} - {output_filter(income)}: {last_rate.total_rate:.2f} ({last_rate.income_rate:.2f}, {last_rate.natins_rate:.2f}, {last_rate.healthins_rate:.2f})"
+                    )
+                    last_rate_floor = income
+                last_rate = effrate
+        print(
+            f"{output_filter(last_rate_floor)} - infinity: {last_rate.total_rate:.2f} ({last_rate.income_rate:.2f}, {last_rate.natins_rate:.2f}, {last_rate.healthins_rate:.2f})"
+        )
+        return
+
     if params["independent_mode"]:
         social_salary = params["base_salary"] - params["tax_worth_expenses"]
         non_social_salary = params["tax_worth_expenses"]
@@ -285,10 +367,10 @@ def main():
         if result.details.salary_for_income < ceiling
     ][0]
     result2 = impl(social_salary + 1, non_social_salary, params, consts)
-    effrate = result2.details.in_tax - result.details.in_tax
+    effrate = calculate_effective_marginal_rate(1, result, result2)
     effrate_text = (
-        f"; effective marginal rate {effrate:.2f}"
-        if abs(rate - effrate) >= 0.01
+        f"; effective marginal rate {effrate.income_rate:.2f}"
+        if abs(rate - effrate.income_rate) >= 0.01
         else ""
     )
 
