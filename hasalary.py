@@ -261,7 +261,9 @@ def main():
     result2 = impl(social_salary + 1, non_social_salary, params, consts)
     effrate = result2.details.in_tax - result.details.in_tax
     effrate_text = (
-        f"; effective marginal rate {effrate:.2f}" if (rate - effrate) >= 0.01 else ""
+        f"; effective marginal rate {effrate:.2f}"
+        if abs(rate - effrate) >= 0.01
+        else ""
     )
 
     result_pretty = result_filter(params, result)
