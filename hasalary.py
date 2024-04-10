@@ -46,10 +46,12 @@ class Details:
     pens_employer: float
     reparations: float
     sfund: float
+    sfund_employer: float
     salary_for_income: float
     salary_for_natins: float
     salary_for_pens: float
     netto_salary: float
+    natins_employer: float
 
 
 @dataclass
@@ -74,6 +76,7 @@ def impl(social_salary, non_social_salary, params, consts) -> Result:
             social_salary, consts["STUDY_FUND_INDEPENDENT_MAX_SALARY"]
         )
         pens_employer = None
+        sfund_employer = None
         reparations = None
 
         tax_worth_expenses = params["tax_worth_expenses"]
@@ -83,6 +86,7 @@ def impl(social_salary, non_social_salary, params, consts) -> Result:
         natins_tax = tax_steps(
             salary_for_natins, consts["INDEPENDENT_NATIONAL_INSURANCE_STEPS"]
         )
+        natins_employer = None
         healthins_tax = tax_steps(salary_for_natins, consts["HEALTH_INSURANCE_STEPS"])
         natins_writeoff = natins_tax * NATIONAL_INSURANCE_INDEPENDENT_WRITEOFF_RATE
 
@@ -131,16 +135,20 @@ def impl(social_salary, non_social_salary, params, consts) -> Result:
             ) * consts["STUDY_FUND_EMPLOYER"]
             tax_worth_features += sfund_taxed
             tax["worth sfund_taxed"] = sfund_taxed
-            sfund = consts["STUDY_FUND_EMPLOYEE"] * social_salary
+            sfund_salary = social_salary
         else:
-            sfund = consts["STUDY_FUND_EMPLOYEE"] * min(
-                social_salary, consts["STUDY_FUND_TAX_EXEMPT_MAX"]
-            )
+            sfund_salary = min(social_salary, consts["STUDY_FUND_TAX_EXEMPT_MAX"])
+
+        sfund = consts["STUDY_FUND_EMPLOYEE"] * social_salary
+        sfund_employer = consts["STUDY_FUND_EMPLOYER"] * social_salary
 
         # National Insurance
         salary_for_natins = salary + tax_worth_features
         natins_tax = tax_steps(salary_for_natins, consts["NATIONAL_INSURANCE_STEPS"])
         healthins_tax = tax_steps(salary_for_natins, consts["HEALTH_INSURANCE_STEPS"])
+        natins_employer = tax_steps(
+            salary_for_natins, consts["EMPLOYER_NATIONAL_INSURANCE_STEPS"]
+        )
 
         # Income Tax
         salary_for_income = salary + tax_worth_features
@@ -161,10 +169,12 @@ def impl(social_salary, non_social_salary, params, consts) -> Result:
         pens_employer,
         reparations,
         sfund,
+        sfund_employer,
         salary_for_income,
         salary_for_natins,
         salary_for_pens,
         netto_salary,
+        natins_employer,
     )
     return Result(details, tax)
 
@@ -294,7 +304,6 @@ def main():
     details = result.details
     if params["independent_mode"]:
         reparations_cash = 0
-        employer_sfund = 0
     else:
         reparations_cash = min(
             details.reparations, consts["REPARATIONS_PULL_TAX_EXEMPT_MAX"]
@@ -318,13 +327,12 @@ def main():
                 / params["monthly_reparations_pull"]
             )
             reparations_cash += taxed_reparations * (1 - tax_rate)
-        employer_sfund = consts["STUDY_FUND_EMPLOYER"] * (
-            social_salary
-            if params["full_study_fund"]
-            else min(social_salary, consts["STUDY_FUND_TAX_EXEMPT_MAX"])
-        )
 
-    sfund_cash = details.sfund + employer_sfund
+    sfund_cash = (
+        details.sfund
+        if params["independent_mode"]
+        else details.sfund + details.sfund_employer
+    )
     pens_total = (
         details.pens
         if params["independent_mode"]
@@ -368,18 +376,14 @@ def main():
 
     # Part 4 (employment cost)
     if not params["independent_mode"] and params["calculate_employment_cost"]:
-        employer_pension = params["PENSION_EMPLOYER"] * social_salary
-        employer_natins = tax_steps(
-            details.salary_for_natins, consts["EMPLOYER_NATIONAL_INSURANCE_STEPS"]
-        )
         employment_cost = (
             details.salary
             + params["ten_bis"]
             + params["goods"]
-            + employer_natins
-            + employer_pension
+            + details.natins_employer
+            + details.pens_employer
             + details.reparations
-            + employer_sfund
+            + details.sfund_employer
         )
         print(f"Employment cost: {round(employment_cost)}")
 
