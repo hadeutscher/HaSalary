@@ -340,13 +340,15 @@ def main():
             if last_rate is None:
                 last_rate = effrate
                 last_rate_floor = income
-            elif abs(effrate.total_rate - last_rate.total_rate) >= 0.01:
-                if income - last_rate_floor > 10:
-                    print(
-                        f"{output_filter(last_rate_floor)} - {output_filter(income)}: {last_rate.total_rate:.2f} ({last_rate.income_rate:.2f}, {last_rate.natins_rate:.2f}, {last_rate.healthins_rate:.2f})"
-                    )
-                    last_rate_floor = income
-                last_rate = effrate
+            elif (
+                abs(effrate.total_rate - last_rate.total_rate) >= 0.005
+                and income - last_rate_floor > 10
+            ):
+                print(
+                    f"{output_filter(last_rate_floor)} - {output_filter(income)}: {last_rate.total_rate:.2f} ({last_rate.income_rate:.2f}, {last_rate.natins_rate:.2f}, {last_rate.healthins_rate:.2f})"
+                )
+                last_rate_floor = income
+            last_rate = effrate
         print(
             f"{output_filter(last_rate_floor)} - infinity: {last_rate.total_rate:.2f} ({last_rate.income_rate:.2f}, {last_rate.natins_rate:.2f}, {last_rate.healthins_rate:.2f})"
         )
