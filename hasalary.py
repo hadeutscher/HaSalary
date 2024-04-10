@@ -32,6 +32,20 @@ def income_tax(s, pts, consts):
     )
 
 
+def natins_independent(y, consts):
+    m, t1 = consts["INDEPENDENT_NATIONAL_INSURANCE_STEPS"][0]
+    _, t2 = consts["INDEPENDENT_NATIONAL_INSURANCE_STEPS"][1]
+    z = NATIONAL_INSURANCE_INDEPENDENT_WRITEOFF_RATE
+
+    # Voodoo magic
+    # https://www.btl.gov.il/Insurance/National%20Insurance/type_list/Self_Employed/Pages/hishov.dmey.bituach.aspx
+    x = y - m * z * t1
+    if x <= m:
+        return x
+    else:
+        return (y + m * z * (t2 - t1)) / (1 + z * t2)
+
+
 def postprocess(x):
     return x
 
@@ -82,7 +96,9 @@ def impl(social_salary, non_social_salary, params, consts) -> Result:
         tax_worth_expenses = params["tax_worth_expenses"]
 
         # National insurance
-        salary_for_natins = salary - tax_worth_expenses - pens_a - sfund
+        salary_for_natins = natins_independent(
+            salary - tax_worth_expenses - pens_a - sfund, consts
+        )
         natins_tax = tax_steps(
             salary_for_natins, consts["INDEPENDENT_NATIONAL_INSURANCE_STEPS"]
         )
