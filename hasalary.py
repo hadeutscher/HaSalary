@@ -156,8 +156,8 @@ def impl(social_salary, non_social_salary, params, consts) -> Result:
         else:
             sfund_salary = min(social_salary, consts["STUDY_FUND_TAX_EXEMPT_MAX"])
 
-        sfund = consts["STUDY_FUND_EMPLOYEE"] * social_salary
-        sfund_employer = consts["STUDY_FUND_EMPLOYER"] * social_salary
+        sfund = consts["STUDY_FUND_EMPLOYEE"] * sfund_salary
+        sfund_employer = consts["STUDY_FUND_EMPLOYER"] * sfund_salary
 
         # National Insurance
         salary_for_natins = salary + tax_worth_features
