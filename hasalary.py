@@ -8,6 +8,7 @@
 from dataclasses import dataclass, fields, replace
 import itertools
 import argparse
+import math
 import os.path
 import logging
 
@@ -32,6 +33,20 @@ def income_tax(s, pts, consts):
     )
 
 
+def natins_independent(y, consts):
+    m, t1 = consts["INDEPENDENT_NATIONAL_INSURANCE_STEPS"][0]
+    _, t2 = consts["INDEPENDENT_NATIONAL_INSURANCE_STEPS"][1]
+    z = NATIONAL_INSURANCE_INDEPENDENT_WRITEOFF_RATE
+
+    # Voodoo magic
+    # https://www.btl.gov.il/Insurance/National%20Insurance/type_list/Self_Employed/Pages/hishov.dmey.bituach.aspx
+    x = y - m * z * t1
+    if x <= m:
+        return x
+    else:
+        return (y + m * z * (t2 - t1)) / (1 + z * t2)
+
+
 def postprocess(x):
     return x
 
@@ -46,10 +61,12 @@ class Details:
     pens_employer: float
     reparations: float
     sfund: float
+    sfund_employer: float
     salary_for_income: float
     salary_for_natins: float
     salary_for_pens: float
     netto_salary: float
+    natins_employer: float
 
 
 @dataclass
@@ -74,15 +91,19 @@ def impl(social_salary, non_social_salary, params, consts) -> Result:
             social_salary, consts["STUDY_FUND_INDEPENDENT_MAX_SALARY"]
         )
         pens_employer = None
+        sfund_employer = None
         reparations = None
 
         tax_worth_expenses = params["tax_worth_expenses"]
 
         # National insurance
-        salary_for_natins = salary - tax_worth_expenses - pens_a - sfund
+        salary_for_natins = natins_independent(
+            salary - tax_worth_expenses - pens_a - sfund, consts
+        )
         natins_tax = tax_steps(
             salary_for_natins, consts["INDEPENDENT_NATIONAL_INSURANCE_STEPS"]
         )
+        natins_employer = None
         healthins_tax = tax_steps(salary_for_natins, consts["HEALTH_INSURANCE_STEPS"])
         natins_writeoff = natins_tax * NATIONAL_INSURANCE_INDEPENDENT_WRITEOFF_RATE
 
@@ -131,16 +152,20 @@ def impl(social_salary, non_social_salary, params, consts) -> Result:
             ) * consts["STUDY_FUND_EMPLOYER"]
             tax_worth_features += sfund_taxed
             tax["worth sfund_taxed"] = sfund_taxed
-            sfund = consts["STUDY_FUND_EMPLOYEE"] * social_salary
+            sfund_salary = social_salary
         else:
-            sfund = consts["STUDY_FUND_EMPLOYEE"] * min(
-                social_salary, consts["STUDY_FUND_TAX_EXEMPT_MAX"]
-            )
+            sfund_salary = min(social_salary, consts["STUDY_FUND_TAX_EXEMPT_MAX"])
+
+        sfund = consts["STUDY_FUND_EMPLOYEE"] * social_salary
+        sfund_employer = consts["STUDY_FUND_EMPLOYER"] * social_salary
 
         # National Insurance
         salary_for_natins = salary + tax_worth_features
         natins_tax = tax_steps(salary_for_natins, consts["NATIONAL_INSURANCE_STEPS"])
         healthins_tax = tax_steps(salary_for_natins, consts["HEALTH_INSURANCE_STEPS"])
+        natins_employer = tax_steps(
+            salary_for_natins, consts["EMPLOYER_NATIONAL_INSURANCE_STEPS"]
+        )
 
         # Income Tax
         salary_for_income = salary + tax_worth_features
@@ -161,10 +186,12 @@ def impl(social_salary, non_social_salary, params, consts) -> Result:
         pens_employer,
         reparations,
         sfund,
+        sfund_employer,
         salary_for_income,
         salary_for_natins,
         salary_for_pens,
         netto_salary,
+        natins_employer,
     )
     return Result(details, tax)
 
@@ -181,7 +208,7 @@ def result_filter(params, result: Result) -> Result:
 
     if details.in_tax < 0:
         logging.getLogger().warn(
-            f"got negative income tax, {round(-result.in_tax)} in tax benefits is wasted"
+            f"got negative income tax, {round(-details.in_tax)} in tax benefits is wasted"
         )
         details.in_tax = 0
 
@@ -211,11 +238,51 @@ def params_filter(params):
     return params
 
 
+@dataclass
+class RatesResult:
+    income_rate: float
+    natins_rate: float
+    healthins_rate: float
+    total_rate: float
+
+
+def calculate_effective_marginal_rate(
+    base: float, result1: Result, result2: Result
+) -> RatesResult:
+    if (
+        result1.details.pens_employer is not None
+        and result1.details.sfund_employer is not None
+        and result1.details.reparations is not None
+        and result2.details.pens_employer is not None
+        and result2.details.sfund_employer is not None
+        and result2.details.reparations is not None
+    ):
+        assert result2.details.pens_employer >= result1.details.pens_employer
+        assert result2.details.sfund_employer >= result1.details.sfund_employer
+        assert result2.details.reparations >= result1.details.reparations
+        base += (
+            (result2.details.pens_employer - result1.details.pens_employer)
+            + (result2.details.sfund_employer - result1.details.sfund_employer)
+            + (result2.details.reparations - result1.details.reparations)
+        )
+    if result1.details.in_tax <= 0 and result1.details.in_tax <= 0:
+        income_rate = 0
+    else:
+        income_rate = (result2.details.in_tax - result1.details.in_tax) / base
+    natins_rate = (result2.details.natins_tax - result1.details.natins_tax) / base
+    healthins_rate = (
+        result2.details.healthins_tax - result1.details.healthins_tax
+    ) / base
+    total_rate = income_rate + natins_rate + healthins_rate
+    return RatesResult(income_rate, natins_rate, healthins_rate, total_rate)
+
+
 def main():
     # Loading config
     parser = argparse.ArgumentParser()
     parser.add_argument("config", type=str, help="config to be used")
     parser.add_argument("-v", "--verbose", action="store_true", help="extra logs")
+    parser.add_argument("-s", "--steps", action="store_true", help="extra logs")
     args = parser.parse_args()
 
     logging.basicConfig()
@@ -244,6 +311,47 @@ def main():
 
     params = params_filter(params)
 
+    if args.steps:
+        print("---Tax steps analysis---")
+        last_step = [
+            ceiling for ceiling, _ in consts["INCOME_TAX_STEPS"] if ceiling < math.inf
+        ][-1]
+        last_rate = None
+        last_rate_floor = 0
+        params_clean = dict(params)
+        params_clean.update(tax_worth_expenses=0, ten_bis=0, goods=0)
+        output_filter = (
+            (lambda x: round(x * 12))
+            if params["annual_numbers"]
+            else (lambda x: round(x))
+        )
+        for income in range(int(last_step) * 12 * 2):
+            income /= 12
+            result1 = impl(income, 0, params_clean, consts)
+            result2 = impl(income + 1 / 12, 0, params_clean, consts)
+            effrate = calculate_effective_marginal_rate(1 / 12, result1, result2)
+            if args.verbose:
+                for result in (result1, result2):
+                    log_tax = logging.getLogger("taxes")
+                    result_pretty = result_filter(params, result)
+                    for k, v in result_pretty.tax_values.items():
+                        log_tax.debug(f"{k}={v}")
+
+            if last_rate is None:
+                last_rate = effrate
+                last_rate_floor = income
+            elif abs(effrate.total_rate - last_rate.total_rate) >= 0.01:
+                if income - last_rate_floor > 10:
+                    print(
+                        f"{output_filter(last_rate_floor)} - {output_filter(income)}: {last_rate.total_rate:.2f} ({last_rate.income_rate:.2f}, {last_rate.natins_rate:.2f}, {last_rate.healthins_rate:.2f})"
+                    )
+                    last_rate_floor = income
+                last_rate = effrate
+        print(
+            f"{output_filter(last_rate_floor)} - infinity: {last_rate.total_rate:.2f} ({last_rate.income_rate:.2f}, {last_rate.natins_rate:.2f}, {last_rate.healthins_rate:.2f})"
+        )
+        return
+
     if params["independent_mode"]:
         social_salary = params["base_salary"] - params["tax_worth_expenses"]
         non_social_salary = params["tax_worth_expenses"]
@@ -259,9 +367,11 @@ def main():
         if result.details.salary_for_income < ceiling
     ][0]
     result2 = impl(social_salary + 1, non_social_salary, params, consts)
-    effrate = result2.details.in_tax - result.details.in_tax
+    effrate = calculate_effective_marginal_rate(1, result, result2)
     effrate_text = (
-        f"; effective marginal rate {effrate:.2f}" if (rate - effrate) >= 0.01 else ""
+        f"; effective marginal rate {effrate.income_rate:.2f}"
+        if abs(rate - effrate.income_rate) >= 0.01
+        else ""
     )
 
     result_pretty = result_filter(params, result)
@@ -292,7 +402,6 @@ def main():
     details = result.details
     if params["independent_mode"]:
         reparations_cash = 0
-        employer_sfund = 0
     else:
         reparations_cash = min(
             details.reparations, consts["REPARATIONS_PULL_TAX_EXEMPT_MAX"]
@@ -316,13 +425,12 @@ def main():
                 / params["monthly_reparations_pull"]
             )
             reparations_cash += taxed_reparations * (1 - tax_rate)
-        employer_sfund = consts["STUDY_FUND_EMPLOYER"] * (
-            social_salary
-            if params["full_study_fund"]
-            else min(social_salary, consts["STUDY_FUND_TAX_EXEMPT_MAX"])
-        )
 
-    sfund_cash = details.sfund + employer_sfund
+    sfund_cash = (
+        details.sfund
+        if params["independent_mode"]
+        else details.sfund + details.sfund_employer
+    )
     pens_total = (
         details.pens
         if params["independent_mode"]
@@ -366,18 +474,14 @@ def main():
 
     # Part 4 (employment cost)
     if not params["independent_mode"] and params["calculate_employment_cost"]:
-        employer_pension = params["PENSION_EMPLOYER"] * social_salary
-        employer_natins = tax_steps(
-            details.salary_for_natins, consts["EMPLOYER_NATIONAL_INSURANCE_STEPS"]
-        )
         employment_cost = (
             details.salary
             + params["ten_bis"]
             + params["goods"]
-            + employer_natins
-            + employer_pension
+            + details.natins_employer
+            + details.pens_employer
             + details.reparations
-            + employer_sfund
+            + details.sfund_employer
         )
         print(f"Employment cost: {round(employment_cost)}")
 
