@@ -181,7 +181,7 @@ def result_filter(params, result: Result) -> Result:
 
     if details.in_tax < 0:
         logging.getLogger().warn(
-            f"got negative income tax, {round(-result.in_tax)} in tax benefits is wasted"
+            f"got negative income tax, {round(-details.in_tax)} in tax benefits is wasted"
         )
         details.in_tax = 0
 
