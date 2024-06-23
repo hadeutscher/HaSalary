@@ -106,6 +106,8 @@ def impl(social_salary, non_social_salary, params, consts) -> Result:
         natins_employer = None
         healthins_tax = tax_steps(salary_for_natins, consts["HEALTH_INSURANCE_STEPS"])
         natins_writeoff = natins_tax * NATIONAL_INSURANCE_INDEPENDENT_WRITEOFF_RATE
+        if params.get("experimental_delay_natins_payment", False):
+            natins_writeoff = 0
 
         # Income tax
         tax["deduction tax_worth_expenses"] = tax_worth_expenses
@@ -115,10 +117,23 @@ def impl(social_salary, non_social_salary, params, consts) -> Result:
         salary_for_income = (
             salary - tax_worth_expenses - pens_a - sfund - natins_writeoff
         )
+        prev_worth = params.get("experimental_injected_previous_tax_worth")
+        if prev_worth is not None:
+            tax["worth prev_worth"] = prev_worth
+            salary_for_income += prev_worth
         in_tax = income_tax(salary_for_income, params["tax_pts"], consts)
         pens_b_re = consts["PENSION_REIMBURSE"] * pens_b
         tax["reimburse pens_b_re"] = pens_b_re
         in_tax -= pens_b_re
+
+        prev_45a = params.get("experimental_injected_45a_value")
+        if prev_45a is not None:
+            pension_re = consts["PENSION_REIMBURSE"] * min(
+                prev_45a, consts["PENSION_REIMBURSE_PAYMENTS_MAX"]
+            )
+            tax["reimburse prev_45a"] = pension_re
+            in_tax -= pension_re
+
     else:
         tax_worth_features = params["ten_bis"] + params["goods"]
         tax["worth tax_worth_features"] = tax_worth_features
@@ -177,6 +192,9 @@ def impl(social_salary, non_social_salary, params, consts) -> Result:
         in_tax -= pension_re
 
     netto_salary = salary - in_tax - natins_tax - healthins_tax - pens - sfund
+    prev_income = params.get("experimental_injected_net_income")
+    if prev_income is not None:
+        netto_salary += prev_income
     details = Details(
         salary,
         in_tax,
