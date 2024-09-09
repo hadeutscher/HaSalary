@@ -225,7 +225,7 @@ def result_filter(params, result: Result) -> Result:
         details = replace(details, **{field.name: round(value)})
 
     if details.in_tax < 0:
-        logging.getLogger().warn(
+        logging.getLogger().warning(
             f"got negative income tax, {round(-details.in_tax)} in tax benefits is wasted"
         )
         details.in_tax = 0
