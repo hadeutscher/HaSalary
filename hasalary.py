@@ -42,7 +42,7 @@ def natins_independent(y, consts):
     # https://www.btl.gov.il/Insurance/National%20Insurance/type_list/Self_Employed/Pages/hishov.dmey.bituach.aspx
     x = y - m * z * t1
     if x <= m:
-        return x
+        return max(x, 0)
     else:
         return (y + m * z * (t2 - t1)) / (1 + z * t2)
 
@@ -94,7 +94,7 @@ def impl(social_salary, non_social_salary, params, consts) -> Result:
         sfund_employer = None
         reparations = None
 
-        tax_worth_expenses = params["tax_worth_expenses"]
+        tax_worth_expenses = min(salary, params["tax_worth_expenses"])
 
         # National insurance
         salary_for_natins = natins_independent(
@@ -191,7 +191,7 @@ def impl(social_salary, non_social_salary, params, consts) -> Result:
         tax["reimburse pension_re"] = pension_re
         in_tax -= pension_re
 
-    netto_salary = salary - in_tax - natins_tax - healthins_tax - pens - sfund
+    netto_salary = salary - max(in_tax, 0) - natins_tax - healthins_tax - pens - sfund
     prev_income = params.get("experimental_injected_net_income")
     if prev_income is not None:
         netto_salary += prev_income
@@ -373,8 +373,12 @@ def main():
         return
 
     if params["independent_mode"]:
-        social_salary = params["base_salary"] - params["tax_worth_expenses"]
-        non_social_salary = params["tax_worth_expenses"]
+        if params["tax_worth_expenses"] > params["base_salary"]:
+            social_salary = 0
+            non_social_salary = params["base_salary"]
+        else:
+            social_salary = params["base_salary"] - params["tax_worth_expenses"]
+            non_social_salary = params["tax_worth_expenses"]
     else:
         social_salary = params["base_salary"] * params["percentage"]
         non_social_salary = params["travel_allowance"] + params["bonuses"]
