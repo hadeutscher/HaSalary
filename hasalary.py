@@ -47,10 +47,6 @@ def natins_independent(y, consts):
         return (y + m * z * (t2 - t1)) / (1 + z * t2)
 
 
-def postprocess(x):
-    return x
-
-
 @dataclass
 class Details:
     salary: float
@@ -463,7 +459,7 @@ def main():
     total_monthly_income = details.netto_salary + reparations_cash + sfund_cash
     if params["include_pension"]:
         total_monthly_income += pens_total
-    total_monthly_income2 = postprocess(total_monthly_income)
+    total_monthly_income2 = params.get("postprocess", lambda x: x)(total_monthly_income)
 
     if params["annual_numbers"]:
         pens_total *= 12
