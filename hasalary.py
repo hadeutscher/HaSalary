@@ -96,9 +96,19 @@ def impl(social_salary, non_social_salary, params, consts) -> Result:
         salary_for_natins = natins_independent(
             salary - tax_worth_expenses - pens_a - sfund, consts
         )
+        prev_worth = params.get("experimental_injected_previous_btl_worth")
+        if prev_worth is not None:
+            salary_for_natins += prev_worth
         natins_tax = tax_steps(
             salary_for_natins, consts["INDEPENDENT_NATIONAL_INSURANCE_STEPS"]
         )
+        if prev_worth is not None:
+            # Offset the fact that the prev worth was taxed as an employee but we calculated it as an independent
+            offset = tax_steps(
+                prev_worth, consts["NATIONAL_INSURANCE_STEPS"]
+            ) - tax_steps(prev_worth, consts["INDEPENDENT_NATIONAL_INSURANCE_STEPS"])
+            assert offset <= 0
+            natins_tax += offset
         natins_employer = None
         healthins_tax = tax_steps(salary_for_natins, consts["HEALTH_INSURANCE_STEPS"])
         natins_writeoff = natins_tax * NATIONAL_INSURANCE_INDEPENDENT_WRITEOFF_RATE
