@@ -5,12 +5,13 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-from dataclasses import dataclass, fields, replace
-import itertools
 import argparse
+import itertools
+import logging
 import math
 import os.path
-import logging
+from dataclasses import dataclass, fields, replace
+from typing import Optional
 
 # Income tax law, section 47a(a)
 NATIONAL_INSURANCE_INDEPENDENT_WRITEOFF_RATE = 0.52
@@ -54,15 +55,15 @@ class Details:
     natins_tax: float
     healthins_tax: float
     pens: float
-    pens_employer: float
-    reparations: float
+    pens_employer: Optional[float]
+    reparations: Optional[float]
     sfund: float
-    sfund_employer: float
+    sfund_employer: Optional[float]
     salary_for_income: float
     salary_for_natins: float
     salary_for_pens: float
     netto_salary: float
-    natins_employer: float
+    natins_employer: Optional[float]
 
 
 @dataclass
@@ -373,6 +374,7 @@ def main():
                 )
                 last_rate_floor = income
             last_rate = effrate
+        assert last_rate is not None
         print(
             f"{output_filter(last_rate_floor)} - infinity: {last_rate.total_rate:.2f} ({last_rate.income_rate:.2f}, {last_rate.natins_rate:.2f}, {last_rate.healthins_rate:.2f})"
         )
@@ -430,7 +432,7 @@ def main():
 
     # Part 2 (total income)
     details = result.details
-    if params["independent_mode"]:
+    if details.reparations is None:
         reparations_cash = 0
     else:
         reparations_cash = min(
@@ -458,12 +460,12 @@ def main():
 
     sfund_cash = (
         details.sfund
-        if params["independent_mode"]
+        if details.sfund_employer is None
         else details.sfund + details.sfund_employer
     )
     pens_total = (
         details.pens
-        if params["independent_mode"]
+        if details.pens_employer is None
         else (details.pens + details.pens_employer)
     )
     total_monthly_income = details.netto_salary + reparations_cash + sfund_cash
@@ -490,6 +492,7 @@ def main():
     if params["target"] is not None:
         monthly_gain = total_monthly_income - params["monthly_expense"]
         monthly_gain_rate = params["yearly_gain_rate"] ** (1 / 12)
+        years = 0
         for i in itertools.count():
             if (
                 params["current_cash"] * monthly_gain_rate**i
